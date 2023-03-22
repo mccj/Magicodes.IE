@@ -809,6 +809,7 @@ namespace Magicodes.ExporterAndImporter.Excel.Utility
                 worksheet.Row(1).Height = ExcelImporterSettings.DescriptionHeight;
             }
 
+            var colIndexDic = new System.Collections.Concurrent.ConcurrentDictionary<string, int>();
             for (var i = 0; i < ImporterHeaderInfos.Count; i++)
             {
                 //忽略
@@ -830,15 +831,28 @@ namespace Magicodes.ExporterAndImporter.Excel.Utility
                     var range = ExcelCellBase.GetAddress(ExcelImporterSettings.HeaderRowIndex + 1, i + 1,
                         ExcelPackage.MaxRows, i + 1);
                     var dataValidations = worksheet.DataValidations.AddListValidation(range);
-                    var hiddenWorksheet = excelPackage.Workbook.Worksheets.Add($"hidden_{ImporterHeaderInfos[i].PropertyName}");
+                    var colIndex = colIndexDic.GetOrAdd(ImporterHeaderInfos[i].PropertyName, f => colIndexDic.Count + 1);
+
+                    //var hiddenWorksheet = excelPackage.Workbook.Worksheets.Add($"hidden_{colIndex}");
+                    //hiddenWorksheet.Hidden = eWorkSheetHidden.Visible;
+                    //int y = 1;
+                    //foreach (var mappingValue in ImporterHeaderInfos[i].MappingValues)
+                    //{
+                    //    hiddenWorksheet.Cells[y, 1].Value = mappingValue.Key;
+                    //    y++;
+                    //}
+                    //dataValidations.Formula.ExcelFormula = $"hidden_{colIndex}!$A$1:$A$" + ImporterHeaderInfos[i].MappingValues.Count;
+
+                    var hiddenWorksheet = excelPackage.Workbook.Worksheets.FirstOrDefault(f => f.Name == "hidden_Validations") ?? excelPackage.Workbook.Worksheets.Add("hidden_Validations");
                     hiddenWorksheet.Hidden = eWorkSheetHidden.Hidden;
                     int y = 1;
                     foreach (var mappingValue in ImporterHeaderInfos[i].MappingValues)
                     {
-                        hiddenWorksheet.Cells[y, 1].Value = mappingValue.Key;
+                        hiddenWorksheet.Cells[y, colIndex].Value = mappingValue.Key;
                         y++;
                     }
-                    dataValidations.Formula.ExcelFormula = $"hidden_{ImporterHeaderInfos[i].PropertyName}!$A$1:$A$" + ImporterHeaderInfos[i].MappingValues.Count;
+                    var col = getColumnName(colIndex);
+                    dataValidations.Formula.ExcelFormula = $"hidden_Validations!${col}$1:${col}$" + ImporterHeaderInfos[i].MappingValues.Count;
                 }
 
                 //如果开启数据验证，则添加验证约束
@@ -867,7 +881,24 @@ namespace Magicodes.ExporterAndImporter.Excel.Utility
             //绿色太丑了
             worksheet.Cells[worksheet.Dimension.Address].Style.Fill.BackgroundColor.SetColor(Color.White);
         }
-
+        /// <summary>
+        /// 将行数字转义成字符格式，如 1转成A,2转成B,5转成E
+        /// </summary>
+        /// <param name="columnIndex"></param>
+        /// <returns></returns>
+        private string getColumnName(int columnIndex)
+        {
+            int dividend = columnIndex;
+            string columnName = String.Empty;
+            int modifier;
+            while (dividend > 0)
+            {
+                modifier = (dividend - 1) % 26;
+                columnName = Convert.ToChar(65 + modifier).ToString() + columnName;
+                dividend = (int)((dividend - modifier) / 26);
+            }
+            return columnName;
+        }
         /// <summary>
         /// 设置单元格格式
         /// </summary>
@@ -1094,7 +1125,7 @@ namespace Magicodes.ExporterAndImporter.Excel.Utility
                                     }
 
                                     var value = col.MappingValues[cellValue];
-                                    
+
                                     if (isEnum && isNullable && (value is int || value is short)
                                         // && Enum.IsDefined(type, value)
                                         )
